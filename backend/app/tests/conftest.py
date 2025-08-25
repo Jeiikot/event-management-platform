@@ -1,14 +1,17 @@
-
 # Standard library imports
 import os
 
 # Third-party imports
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, StaticPool
+from sqlalchemy.orm import sessionmaker
 
 # Local imports
 from app.api import create_app
-from app.core.db import init_db
+from app.models.base import Base
+from app.dependencies import auth as deps_auth
+
 
 
 # Configure default environment for isolated tests
@@ -23,11 +26,33 @@ os.environ.setdefault("ALLOWED_ORIGINS", "*")
 
 @pytest.fixture(scope="function")
 def client() -> TestClient:
-    """Provide a FastAPI TestClient with an in-memory database for each test."""
+    test_engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+        future=True,
+    )
+    TestingSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit=False, future=True)
+
+    Base.metadata.create_all(bind=test_engine)
+
     application = create_app()
-    init_db()  # ENV=dev triggers create_all
+
+    def override_get_db():
+        db_session = TestingSessionLocal()
+        try:
+            yield db_session
+        finally:
+            db_session.close()
+
+    application.dependency_overrides[deps_auth.get_db] = override_get_db
+
     with TestClient(application) as test_client:
         yield test_client
+
+    application.dependency_overrides.clear()
+    Base.metadata.drop_all(bind=test_engine)
+    test_engine.dispose()
 
 
 @pytest.fixture
