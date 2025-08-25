@@ -1,6 +1,3 @@
-# Standard library imports
-from datetime import datetime
-
 # Third-party imports
 from pydantic import BaseModel, ConfigDict
 
