@@ -193,7 +193,15 @@ Pytest is configured in `pyproject.toml`. To run:
     poetry run pytest -q
 ```
 
-> At the moment there are no test files in `backend/tests/`. Add unit tests for services and routers to improve coverage.
+Run with coverage (configured via pytest-cov):
+
+```bash
+    # show coverage summary in terminal
+    poetry run pytest
+    
+    # generate an HTML report in backend/htmlcov/
+    poetry run pytest --cov-report=html
+```
 
 ---
 
