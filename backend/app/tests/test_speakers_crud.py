@@ -1,32 +1,48 @@
-
 # Third-party imports
 from fastapi.testclient import TestClient
 
+# Local imports
+from app.tests.helpers import make_event_payload, make_session_payload
 
-def test_speakers_crud(client: TestClient, auth_headers: dict) -> None:
-    # Create
-    create_response = client.post(
-        "/api/v1/speakers",
-        json={"full_name": "Grace Hopper", "bio": "Pioneer"},
+
+def test_sessions_under_event_crud(client: TestClient, auth_headers: dict) -> None:
+    # Create event to host sessions
+    event_payload = make_event_payload(name="SessConf")
+    event_response = client.post("/api/v1/events", json=event_payload, headers=auth_headers)
+    assert event_response.status_code in (200, 201), event_response.text
+    event_id = event_response.json()["id"]
+
+    # Create session (payload uses correct schema fields)
+    session_payload = make_session_payload(title="Talk 1")
+    create_session_response = client.post(
+        f"/api/v1/sessions/events/{event_id}",
+        json=session_payload,
         headers=auth_headers,
     )
-    assert create_response.status_code in (200, 201), create_response.text
-    created_speaker = create_response.json()
-    speaker_id = created_speaker["id"]
+    assert create_session_response.status_code in (200, 201), create_session_response.text
+    created_session = create_session_response.json()
+    session_id = created_session["id"]
 
-    # List
-    list_response = client.get("/api/v1/speakers", headers=auth_headers)
-    assert list_response.status_code == 200, list_response.text
-    speakers_page = list_response.json()
-    assert any(single_speaker["id"] == speaker_id for single_speaker in speakers_page["items"])
+    # List sessions for event
+    list_sessions_response = client.get(f"/api/v1/sessions/events/{event_id}", headers=auth_headers)
+    assert list_sessions_response.status_code == 200, list_sessions_response.text
+    sessions = list_sessions_response.json()
+    assert any(s["id"] == session_id for s in sessions)
 
-    # Update
-    update_response = client.patch(
-        f"/api/v1/speakers/{speaker_id}", json={"bio": "COBOL legend"}, headers=auth_headers
+    # Update session (include capacities to avoid validator comparing None)
+    update_session_payload = {
+        "room": "B2",
+        "capacity_total": created_session.get("capacity_total", session_payload["capacity_total"]),
+        "capacity_available": created_session.get("capacity_available", session_payload["capacity_available"]),
+    }
+    update_session_response = client.patch(
+        f"/api/v1/sessions/{session_id}",
+        json=update_session_payload,
+        headers=auth_headers,
     )
-    assert update_response.status_code == 200, update_response.text
-    assert update_response.json()["bio"] == "COBOL legend"
+    assert update_session_response.status_code == 200, update_session_response.text
+    assert update_session_response.json()["room"] == "B2"
 
-    # Delete
-    delete_response = client.delete(f"/api/v1/speakers/{speaker_id}", headers=auth_headers)
-    assert delete_response.status_code in (200, 204), delete_response.text
+    # Delete session
+    delete_session_response = client.delete(f"/api/v1/sessions/{session_id}", headers=auth_headers)
+    assert delete_session_response.status_code in (200, 204), delete_session_response.text

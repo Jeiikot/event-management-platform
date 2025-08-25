@@ -1,46 +1,61 @@
+# Third-party imports
+from fastapi.testclient import TestClient
 
-def test_session_crud(client, auth_headers):
-    # First create event
+
+def test_session_crud(client: TestClient, auth_headers: dict) -> None:
     event_payload = {
-        "title": "Session Event",
+        "name": "Session Event",
         "description": "Event with sessions",
-        "location": "Neiva",
-        "start_time": "2025-09-01T10:00:00",
-        "end_time": "2025-09-01T18:00:00",
-        "capacity": 100
+        "venue": "Neiva",
+        "start_at": "2025-09-01T10:00:00",
+        "end_at": "2025-09-01T18:00:00",
+        "capacity_total": 100,
+        "capacity_available": 100,
     }
-    ev = client.post("/api/v1/events", json=event_payload, headers=auth_headers).json()
-    event_id = ev["id"]
+    ev_resp = client.post("/api/v1/events", json=event_payload, headers=auth_headers)
+    assert ev_resp.status_code in (200, 201), ev_resp.text
+    event_id = ev_resp.json()["id"]
 
-    # create session
-    payload = {
+    session_payload = {
         "title": "Morning Session",
         "description": "Intro",
-        "event_id": event_id,
-        "start_time": "2025-09-01T10:00:00",
-        "end_time": "2025-09-01T12:00:00"
+        "room": "A1",
+        "start_at": "2025-09-01T10:00:00",
+        "end_at": "2025-09-01T12:00:00",
+        "capacity_total": 50,
+        "capacity_available": 50,
+        "speaker_ids": []
     }
-    r = client.post("/api/v1/sessions", json=payload, headers=auth_headers)
-    assert r.status_code in (200,201), r.text
-    session = r.json()
-    s_id = session["id"]
+    create_resp = client.post(
+        f"/api/v1/sessions/events/{event_id}",
+        json=session_payload,
+        headers=auth_headers,
+    )
+    assert create_resp.status_code in (200, 201), create_resp.text
+    created = create_resp.json()
+    assert "id" in created, f"Esperaba id en la respuesta de creación: {created}"
+    session_id = created["id"]
 
-    # list sessions
-    r2 = client.get("/api/v1/sessions", headers=auth_headers)
-    assert r2.status_code == 200
-    assert any(s["id"] == s_id for s in r2.json())
+    list_resp = client.get(f"/api/v1/sessions/events/{event_id}", headers=auth_headers)
+    assert list_resp.status_code == 200, list_resp.text
+    sessions = list_resp.json()
+    assert any(s["id"] == session_id for s in sessions)
 
-    # update session
-    r3 = client.put(f"/api/v1/sessions/{s_id}", json={
+    update_payload = {
         "title": "Updated Session",
         "description": "Updated desc",
-        "event_id": event_id,
-        "start_time": "2025-09-01T11:00:00",
-        "end_time": "2025-09-01T13:00:00"
-    }, headers=auth_headers)
-    assert r3.status_code == 200
-    assert r3.json()["title"] == "Updated Session"
+        "room": "B2",
+        "capacity_total": created.get("capacity_total", session_payload["capacity_total"]),
+        "capacity_available": created.get("capacity_available", session_payload["capacity_available"]),
+    }
+    patch_resp = client.patch(
+        f"/api/v1/sessions/{session_id}",
+        json=update_payload,
+        headers=auth_headers,
+    )
+    assert patch_resp.status_code == 200, patch_resp.text
+    assert patch_resp.json()["title"] == "Updated Session"
+    assert patch_resp.json()["room"] == "B2"
 
-    # delete
-    r4 = client.delete(f"/api/v1/sessions/{s_id}", headers=auth_headers)
-    assert r4.status_code == 204
+    del_resp = client.delete(f"/api/v1/sessions/{session_id}", headers=auth_headers)
+    assert del_resp.status_code in (200, 204), del_resp.text

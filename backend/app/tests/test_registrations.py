@@ -1,9 +1,8 @@
-
 # Third-party imports
 from fastapi.testclient import TestClient
 
 # Local imports
-from .helpers import make_event_payload
+from app.tests.helpers import make_event_payload
 
 
 def test_register_to_event_and_conflict(client: TestClient, auth_headers: dict) -> None:
