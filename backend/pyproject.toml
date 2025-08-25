@@ -23,6 +23,7 @@ bcrypt = "3.2.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
+pytest-cov = "^6.2.1"
 
 [build-system]
 requires = ["poetry-core"]

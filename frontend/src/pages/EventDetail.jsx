@@ -13,7 +13,7 @@ export default function EventDetail({ pushToast }) {
   const [sessions, setSessions] = useState([])
   const [regLoading, setRegLoading] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
-  const [sess, setSess] = useState({ title:'', speaker:'', start_time:'', end_time:'', capacity:'' })
+  const [sess, setSess] = useState({ title:'', description:'', start_time:'', end_time:'', room:'', capacity:'1', speaker:'' })
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -21,126 +21,151 @@ export default function EventDetail({ pushToast }) {
       const ev = await apiFetch(config.endpoints.event(id))
       setEvent(ev)
     } catch (e) {
-      pushToast('Error cargando evento: ' + e.message, 'error')
+      pushToast && pushToast('Error cargando evento: ' + e.message, 'error')
     } finally { setLoading(false) }
 
     try {
       const ss = await apiFetch(config.endpoints.sessions(id))
-      setSessions(Array.isArray(ss) ? ss : (ss.items || ss.results || []))
-    } catch {
-      setSessions([])
+      const arr = Array.isArray(ss) ? ss : (ss.items || ss.results || [])
+      setSessions(arr)
+    } catch (e) {
+      pushToast && pushToast('Error cargando sesiones: ' + e.message, 'error')
     }
   }, [config, id, pushToast])
 
   useEffect(()=>{ loadData() }, [loadData])
 
-  const doRegister = async () => {
-    setRegLoading(true)
+  const handleRegister = async () => {
     try {
+      setRegLoading(true)
       await apiFetch(config.endpoints.eventRegister(id), { method:'POST', auth:true })
-      pushToast('¡Registro exitoso!', 'success')
-      loadData()
-    } catch (e) {
-      pushToast('No fue posible registrarte: ' + e.message, 'error')
+      pushToast && pushToast('Inscripción realizada', 'success')
+    } catch(e) {
+      pushToast && pushToast('Error al inscribirte: ' + e.message, 'error')
     } finally { setRegLoading(false) }
   }
 
-  const createSession = async (e) => {
+  const saveSession = async (e) => {
     e.preventDefault()
     try {
+      const cap = Math.max(1, Number(sess.capacity) || 1)
       const payload = {
         title: sess.title,
-        speaker: sess.speaker,
-        start_time: sess.start_time,
-        end_time: sess.end_time,
-        capacity: sess.capacity ? Number(sess.capacity) : undefined,
+        description: sess.description || null,
+        start_at: sess.start_time ? new Date(sess.start_time).toISOString() : null,
+        end_at: sess.end_time ? new Date(sess.end_time).toISOString() : null,
+        room: sess.room || null,
+        capacity_total: cap,
+        capacity_available: cap,
+        speaker_ids: (sess.speaker || '').split(',').map(s=>parseInt(s,10)).filter(n=>!Number.isNaN(n)),
       }
       await apiFetch(config.endpoints.sessions(id), { method:'POST', auth:true, body: payload })
-      pushToast('Sesión creada', 'success')
+      pushToast && pushToast('Sesión creada', 'success')
       setFormOpen(false)
-      setSess({ title:'', speaker:'', start_time:'', end_time:'', capacity:'' })
+      setSess({ title:'', description:'', start_time:'', end_time:'', room:'', capacity:'1', speaker:'' })
       loadData()
     } catch (e) {
-      pushToast('Error creando sesión: ' + e.message, 'error')
+      pushToast && pushToast('Error creando sesión: ' + e.message, 'error')
     }
   }
 
-  if (loading) return <div className="max-w-4xl mx-auto px-4 py-6"><Loading/></div>
+  if (loading) return <Loading/>
   if (!event) return <div className="max-w-4xl mx-auto px-4 py-6"><Empty>Evento no encontrado.</Empty></div>
 
-  const remaining = (typeof event.capacity !== 'undefined' && typeof event.seats_taken !== 'undefined')
-    ? Math.max(0, event.capacity - event.seats_taken) : undefined
-
+  const remaining = typeof event.capacity_available !== 'undefined' ? event.capacity_available : undefined
   const loggedIn = !!getToken()
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
       <div className="bg-white border rounded-xl p-5">
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">{event.name || event.title}</h1>
-          <span className={"text-xs px-2 py-0.5 rounded-full border " + (event.status==='ACTIVE' ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-700")}>{event.status || "DRAFT"}</span>
-        </div>
-        <p className="text-slate-700 mt-2">{event.description || "Sin descripción"}</p>
-        <div className="mt-3 flex flex-wrap items-center text-sm gap-3 text-slate-600">
-          {event.date && <span>📅 {new Date(event.date).toLocaleString()}</span>}
-          {(event.location || event.place) && <span>📍 {event.location || event.place}</span>}
-          {(typeof event.capacity !== "undefined") && <span>👥 Capacidad: {event.capacity}</span>}
-          {(typeof remaining !== "undefined") && <span>🎟️ Disponibles: {remaining}</span>}
+        <div className="text-2xl font-semibold">{event.name}</div>
+        {event.description && <p className="text-slate-700 mt-1">{event.description}</p>}
+        <div className="mt-2 flex items-center flex-wrap gap-3 text-slate-600">
+          {event.start_at && <div>📅 {new Date(event.start_at).toLocaleString()}</div>}
+          {event.end_at && <div>🕙 {new Date(event.end_at).toLocaleString()}</div>}
+          {event.venue && <div>📍 {event.venue}</div>}
+          {(typeof remaining !== 'undefined') && <div>👥 Cupos: {remaining}</div>}
         </div>
 
-        {loggedIn && (
-          <div className="mt-4">
-            <button disabled={regLoading} onClick={doRegister} className="px-4 py-2 rounded-lg bg-slate-900 text-white disabled:opacity-50">
-              {regLoading ? "Registrando..." : "Registrarme a este evento"}
-            </button>
-          </div>
-        )}
+        <div className="mt-4 flex items-center gap-2">
+          {loggedIn && <button disabled={regLoading} onClick={handleRegister} className="px-4 py-2 rounded-lg border">{regLoading ? 'Inscribiendo...' : 'Inscribirme'}</button>}
+          <Link to={"/events/" + id + "/edit"} className="underline text-sm">Editar evento</Link>
+        </div>
       </div>
 
       <div className="bg-white border rounded-xl p-5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Sesiones</h2>
-          {loggedIn && (
-            <button onClick={()=>setFormOpen(!formOpen)} className="px-3 py-1.5 rounded-lg border hover:bg-slate-50">
-              {formOpen ? "Cancelar" : "Nueva sesión"}
-            </button>
-          )}
+          <div className="font-semibold">Sesiones</div>
+          <button className="px-3 py-1.5 rounded-lg border" onClick={()=>setFormOpen(v=>!v)}>{formOpen ? 'Cerrar' : 'Nueva sesión'}</button>
         </div>
 
         {formOpen && (
-          <form onSubmit={createSession} className="grid md:grid-cols-5 gap-3 mt-4">
-            <input required className="border rounded-lg px-3 py-2" placeholder="Título" value={sess.title} onChange={e=>setSess(s=>({...s, title:e.target.value}))}/>
-            <input className="border rounded-lg px-3 py-2" placeholder="Ponente" value={sess.speaker} onChange={e=>setSess(s=>({...s, speaker:e.target.value}))}/>
-            <input required type="datetime-local" className="border rounded-lg px-3 py-2" value={sess.start_time} onChange={e=>setSess(s=>({...s, start_time:e.target.value}))}/>
-            <input required type="datetime-local" className="border rounded-lg px-3 py-2" value={sess.end_time} onChange={e=>setSess(s=>({...s, end_time:e.target.value}))}/>
-            <input type="number" min="0" className="border rounded-lg px-3 py-2" placeholder="Capacidad" value={sess.capacity} onChange={e=>setSess(s=>({...s, capacity:e.target.value}))}/>
-            <div className="md:col-span-5">
-              <button className="px-4 py-2 rounded-lg bg-emerald-600 text-white">Crear sesión</button>
+          <form onSubmit={saveSession} className="grid md:grid-cols-2 gap-4 mt-4">
+            <div>
+              <label htmlFor="sess-title" className="text-sm text-slate-600">Título *</label>
+              <input id="sess-title" className="border rounded-lg px-3 py-2 w-full" placeholder="Título"
+                     value={sess.title} onChange={e=>setSess(s=>({...s, title:e.target.value}))} required/>
+            </div>
+
+            <div>
+              <label htmlFor="sess-room" className="text-sm text-slate-600">Sala (opcional)</label>
+              <input id="sess-room" className="border rounded-lg px-3 py-2 w-full" placeholder="Sala"
+                     value={sess.room} onChange={e=>setSess(s=>({...s, room:e.target.value}))}/>
+            </div>
+
+            <div>
+              <label htmlFor="sess-start" className="text-sm text-slate-600">📅 Fecha y hora (inicio) *</label>
+              <input id="sess-start" className="border rounded-lg px-3 py-2 w-full" type="datetime-local"
+                     value={sess.start_time} onChange={e=>setSess(s=>({...s, start_time:e.target.value}))} required/>
+            </div>
+
+            <div>
+              <label htmlFor="sess-end" className="text-sm text-slate-600">🕙 Fecha y hora (fin) *</label>
+              <input id="sess-end" className="border rounded-lg px-3 py-2 w-full" type="datetime-local"
+                     value={sess.end_time} onChange={e=>setSess(s=>({...s, end_time:e.target.value}))} required/>
+            </div>
+
+            <div>
+              <label htmlFor="sess-cap" className="text-sm text-slate-600">👥 Capacidad *</label>
+              <input id="sess-cap" className="border rounded-lg px-3 py-2 w-full" type="number" min="1"
+                     value={sess.capacity} onChange={e=>setSess(s=>({...s, capacity:e.target.value}))} required/>
+            </div>
+
+            <div>
+              <label htmlFor="sess-speakers" className="text-sm text-slate-600">IDs de speakers (ej: 1,2)</label>
+              <input id="sess-speakers" className="border rounded-lg px-3 py-2 w-full" placeholder="1,2"
+                     value={sess.speaker} onChange={e=>setSess(s=>({...s, speaker:e.target.value}))}/>
+            </div>
+
+            <div className="md:col-span-2">
+              <label htmlFor="sess-desc" className="text-sm text-slate-600">Descripción (opcional)</label>
+              <textarea id="sess-desc" className="border rounded-lg px-3 py-2 w-full" rows={3}
+                        placeholder="Descripción"
+                        value={sess.description} onChange={e=>setSess(s=>({...s, description:e.target.value}))}/>
+            </div>
+
+            <div className="md:col-span-2">
+              <button className="px-4 py-2 rounded-lg border bg-black text-white">Guardar sesión</button>
             </div>
           </form>
         )}
 
-        <div className="mt-4 space-y-3">
-          {sessions.length === 0 ? <Empty>No hay sesiones registradas.</Empty> : sessions.map((s, idx) => (
-            <div key={s.id || idx} className="border rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{s.title || s.name}</div>
-                  <div className="text-sm text-slate-600">{s.speaker ? ("Ponente: " + s.speaker) : "Ponente por definir"}</div>
+        <div className="mt-4">
+          {sessions.length === 0 ? <Empty>No hay sesiones.</Empty> : (
+            <div className="space-y-3">
+              {sessions.map(s => (
+                <div key={s.id} className="border rounded-lg p-3">
+                  <div className="font-medium">{s.title}</div>
+                  <div className="text-sm text-slate-600 flex flex-wrap gap-3">
+                    {s.start_at && <div>📅 {new Date(s.start_at).toLocaleString()}</div>}
+                    {s.end_at && <div>🕙 {new Date(s.end_at).toLocaleString()}</div>}
+                    {(typeof s.capacity_total !== "undefined") && <div>👥 Capacidad: {s.capacity_total}</div>}
+                  </div>
                 </div>
-                <div className="text-sm text-slate-600">
-                  {s.start_time && <div>🕘 {new Date(s.start_time).toLocaleString()}</div>}
-                  {s.end_time && <div>🕙 {new Date(s.end_time).toLocaleString()}</div>}
-                  {(typeof s.capacity !== "undefined") && <div>👥 Capacidad: {s.capacity}</div>}
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      </div>
-
-      <div className="text-sm">
-        <Link to={"/events/" + id + "/edit"} className="underline">Editar evento</Link>
       </div>
     </div>
   )

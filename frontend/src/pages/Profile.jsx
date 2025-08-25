@@ -12,36 +12,39 @@ export default function Profile({ pushToast }) {
     (async()=>{
       setLoading(true)
       try {
-        await apiFetch(config.endpoints.me, { auth:true }) // si no existe, ignoramos error
+        await apiFetch(config.endpoints.me, { auth:true }) // valida token
       } catch {}
       try {
         const r = await apiFetch(config.endpoints.myRegistrations, { auth:true })
         const arr = Array.isArray(r) ? r : (r.items || r.results || [])
-        setRegs(arr)
+        // expandir datos del evento
+        const detailed = await Promise.all(arr.map(async reg => {
+          const ev = await apiFetch(config.endpoints.event(reg.event_id), { auth:true })
+          return { ...reg, name: ev.name, date: ev.start_at, venue: ev.venue }
+        }))
+        setRegs(detailed)
       } catch (e) {
-        pushToast('Error cargando perfil: ' + e.message, 'error')
+        pushToast && pushToast('Error cargando perfil: ' + e.message, 'error')
       } finally { setLoading(false) }
     })()
   }, [config, pushToast])
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="text-2xl font-semibold mb-4">Mi perfil</h1>
+    <div className="max-w-3xl mx-auto px-4 py-6">
+      <h1 className="text-xl font-semibold mb-4">Mis inscripciones</h1>
       {loading ? <Loading/> : (
-        <div className="space-y-4">
-          <div className="bg-white border rounded-xl p-4">
-            <div className="text-sm text-slate-600">Sesiones y eventos a los que estoy inscrito:</div>
-            {regs.length === 0 ? <Empty>No tienes registros aún.</Empty> : (
-              <div className="grid md:grid-cols-2 gap-3 mt-3">
-                {regs.map((ev, idx)=>(
-                  <div key={ev.id || idx} className="border rounded-lg p-3 bg-slate-50">
-                    <div className="font-medium">{ev.name || ev.title || ev.event_name || 'Evento'}</div>
-                    {ev.date && <div className="text-sm text-slate-600">📅 {new Date(ev.date).toLocaleString()}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        <div className="bg-white border rounded-xl p-5">
+          {regs.length === 0 ? <Empty>No tienes inscripciones.</Empty> : (
+            <div className="grid md:grid-cols-2 gap-3 mt-3">
+              {regs.map((ev, idx)=>(
+                <div key={ev.id || idx} className="border rounded-lg p-3 bg-slate-50">
+                  <div className="font-medium">{ev.name || 'Evento'}</div>
+                  {ev.date && <div className="text-sm text-slate-600">📅 {new Date(ev.date).toLocaleString()}</div>}
+                  {ev.venue && <div className="text-sm text-slate-600">📍 {ev.venue}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

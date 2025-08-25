@@ -5,6 +5,7 @@ from sqlalchemy import String
 # Local imports
 from app.models.base import Base
 
+
 class UserModel(Base):
     __tablename__ = "user"
 

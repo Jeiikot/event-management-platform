@@ -50,8 +50,11 @@ class EventResponse(BaseModel):
     sessions: List[SessionBasicResponse] = []
 
 class ListEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
+    description: str
     status: EventStatus
     start_at: datetime
     end_at: datetime

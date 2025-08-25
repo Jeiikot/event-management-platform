@@ -20,13 +20,7 @@ def _build_event_response(db: Session, event: EventResponse) -> EventResponse:
 
 def list_events_service(db: Session, page: int, size: int, search: Optional[str]) -> Page[ListEventResponse]:
     events, total = list_events(db, page, size, search)
-    items = [
-        ListEventResponse(
-            id=event.id, name=event.name, status=event.status, start_at=event.start_at, end_at=event.end_at,
-            capacity_available=event.capacity_available
-        )
-        for event in events
-    ]
+    items = [ListEventResponse.model_validate(event)for event in events]
     return Page(items=items, total=total, page=page, size=size)
 
 
